@@ -1,6 +1,6 @@
 const Promise = require("./promise");
 
-function deffered() {
+function deferred() {
     const promise = new Promise();
     return {
         promise,
@@ -18,7 +18,7 @@ function resolved(result) {
 }
 
 module.exports = {
-    deffered,
+    deferred,
     rejected,
     resolved,
 };
