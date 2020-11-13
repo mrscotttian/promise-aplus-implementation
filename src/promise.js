@@ -42,34 +42,45 @@ class Promise {
     _onRejectedQueue = new Queue();
 
     constructor(fn) {
-        if (!isFunction(fn)) throw new TypeError();
-
-        try {
-            fn(this._resolve.bind(this), this._reject.bind(this));
-        } catch (e) {
-            this._reject(e);
+        if (!isFunction(fn)) {
+            throw new TypeError("Promise resolver undefined is not a function");
+        } else {
+            try {
+                fn(this._resolve.bind(this), this._reject.bind(this));
+            } catch (e) {
+                this._reject(e);
+            }
         }
     }
 
     then(onFulfilled, onRejected) {
         // Both onFulfilled and onRejected are optional arguments:
-        let result;
-        let reason;
 
+        // promise2 = promise1.then(onFulfilled, onRejected);
+        const promise2 = new Promise(() => {});
+        let onFulfilledTask;
+        let onRejectedTask;
         if (isFunction(onFulfilled)) {
             // If onFulfilled is a function:
             // it must be called after promise is fulfilled, with promise’s value as its first argument.
             // it must not be called before promise is fulfilled.
             // it must not be called more than once.
-            this._onFulfillQueue.enqueue((x) => {
+            onFulfilledTask = (x) => {
                 try {
-                    result = onFulfilled(x);
+                    // If either onFulfilled or onRejected returns a value x, run the Promise Resolution Procedure [[Resolve]](promise2, x).
+                    let result = onFulfilled(x);
+                    promise2._resolutionProcedure(result);
                 } catch (e) {
-                    reason = e;
+                    // If either onFulfilled or onRejected throws an exception e, promise2 must be rejected with e as the reason.
+                    promise2._reject(e);
                 }
-            });
+            };
         } else {
             // If onFulfilled is not a function, it must be ignored.
+            onFulfilledTask = (x) => {
+                // If onFulfilled is not a function and promise1 is fulfilled, promise2 must be fulfilled with the same value as promise1.
+                promise2._resolve(x);
+            };
         }
 
         if (isFunction(onRejected)) {
@@ -77,41 +88,41 @@ class Promise {
             // it must be called after promise is rejected, with promise’s reason as its first argument.
             // it must not be called before promise is rejected.
             // it must not be called more than once.
-            this._onRejectedQueue.enqueue((r) => {
+            onRejectedTask = (r) => {
                 try {
-                    result = onRejected(r);
+                    // If either onFulfilled or onRejected returns a value x, run the Promise Resolution Procedure [[Resolve]](promise2, x).
+                    let result = onRejected(r);
+                    promise2._resolutionProcedure(result);
                 } catch (e) {
-                    reason = e;
+                    // If either onFulfilled or onRejected throws an exception e, promise2 must be rejected with e as the reason.
+                    promise2._reject(e);
                 }
-            });
+            };
         } else {
             // If onRejected is not a function, it must be ignored.
+            onRejectedTask = (r) => {
+                // If onRejected is not a function and promise1 is rejected, promise2 must be rejected with the same reason as promise1.
+                promise2._reject(r);
+            };
+        }
+
+        if (this._getStatus() === STATUS.PENDING) {
+            this._onFulfillQueue.enqueue(onFulfilledTask);
+            this._onRejectedQueue.enqueue(onRejectedTask);
+        }
+
+        if (this._getStatus() === STATUS.FULFILLED) {
+            onFulfilledTask(this._getResult());
+        }
+
+        if (this._getStatus() === STATUS.REJECTED) {
+            onRejectedTask(this._getResult());
         }
 
         // onFulfilled or onRejected must not be called until the execution context stack contains only platform code. [3.1].
         // onFulfilled and onRejected must be called as functions (i.e. with no this value). [3.2]
         // then may be called multiple times on the same promise.
         // then must return a promise [3.3].
-        // promise2 = promise1.then(onFulfilled, onRejected);
-        // If either onFulfilled or onRejected returns a value x, run the Promise Resolution Procedure [[Resolve]](promise2, x).
-        // If either onFulfilled or onRejected throws an exception e, promise2 must be rejected with e as the reason.
-
-        // If onFulfilled is not a function and promise1 is fulfilled, promise2 must be fulfilled with the same value as promise1.
-        // If onRejected is not a function and promise1 is rejected, promise2 must be rejected with the same reason as promise1.
-
-        const promise2 = new Promise((resolve, reject) => {
-            if (isFunction(onFulfilled)) {
-                promise2._resolutionProcedure(result);
-            } else {
-                resolve(this._getResult);
-            }
-
-            if (isFunction(onRejected)) {
-                reject(reason);
-            } else {
-                reject(this._getResult);
-            }
-        });
 
         return promise2;
     }
